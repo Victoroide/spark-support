@@ -1,0 +1,18 @@
+[MASTER]
+ignore=.venv,output,tests
+max-line-length=88
+
+[MESSAGES CONTROL]
+disable=C0111,R0903,C0103,W0212
+
+[DESIGN]
+max-args=6
+max-locals=15
+max-branches=12
+
+[FORMAT]
+max-line-length=88
+indent-string='    '
+
+[BASIC]
+good-names=i,j,k,df,f,_
