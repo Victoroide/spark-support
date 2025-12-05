@@ -79,6 +79,133 @@ from src.loaders.csv_loader import load_location_data
 from src.loaders.parquet_loader import load_location_data
 ```
 
+## Project Structure
+
+### Directory Organization
+
+El proyecto tiene dos pipelines principales con componentes modulares compartidos:
+
+```
+spark-support/
+│
+├── ═══ PIPELINES PRINCIPALES ═══
+├── etl_datawarehouse.py          # ETL optimizado: Supabase → PostgreSQL Neon
+│                                  # - psycopg2 nativo (sin SQLAlchemy)
+│                                  # - execute_values para bulk inserts
+│                                  # - Star schema (DIM_* + FACT_*)
+│                                  # - ~377k registros en <5 minutos
+│
+├── dashboard_advanced.py         # Dashboard interactivo
+│                                  # - Dash + Bootstrap para UI
+│                                  # - Folium + MarkerCluster para mapas
+│                                  # - Plotly para gráficos
+│                                  # - Filtros por operador, zona, hora
+│
+├── src/main.py                   # Pipeline PySpark original
+│                                  # - Para análisis exploratorio local
+│                                  # - Usa módulos de src/
+│
+├── ═══ MÓDULOS REUTILIZABLES ═══
+├── src/
+│   ├── analyzers/                # Lógica de negocio
+│   │   ├── anomaly_detector.py   # Detecta anomalías (velocidad, señal, batería)
+│   │   ├── device_analyzer.py    # Métricas agregadas por dispositivo
+│   │   ├── network_analyzer.py   # Distribución por tipo de red
+│   │   └── temporal_analyzer.py  # Patrones por hora/día
+│   │
+│   ├── cleaners/                 # Validación y limpieza
+│   │   ├── coordinate_cleaner.py # Valida lat/lon dentro de rangos
+│   │   ├── null_handler.py       # Elimina/imputa valores nulos
+│   │   └── timestamp_cleaner.py  # Valida y parsea timestamps
+│   │
+│   ├── config/                   # Configuración centralizada
+│   │   └── settings.py           # URLs, credenciales, constantes
+│   │
+│   ├── exporters/                # Salida de datos
+│   │   └── result_writer.py      # Escribe CSV/Parquet/DB
+│   │
+│   ├── loaders/                  # Ingesta de datos
+│   │   ├── csv_loader.py         # Carga desde archivo CSV
+│   │   ├── distrito_loader.py    # Carga GeoJSON de distritos
+│   │   └── supabase_loader.py    # Carga desde Supabase API
+│   │
+│   ├── transformers/             # Transformaciones
+│   │   ├── geospatial_calc.py    # Distancia, velocidad entre puntos
+│   │   └── temporal_features.py  # Hora, día, periodo del día
+│   │
+│   └── utils/                    # Utilidades compartidas
+│       ├── fix_district_names.py # Corrige nombres en DIM_ZONAS
+│       ├── logger.py             # Configuración de logging
+│       ├── spark_session.py      # Factory de SparkSession
+│       └── verify_table_case.py  # Verifica case de tablas en PostgreSQL
+│
+├── ═══ DATOS ═══
+├── distrito_municipal_santacruz.json  # 16 polígonos de distritos
+├── locations_rows.csv            # ~17MB datos de respaldo
+│
+└── tests/                        # Pruebas unitarias
+    ├── test_analyzers.py
+    ├── test_cleaners.py
+    ├── test_distrito_loader.py
+    ├── test_etl_fix.py
+    └── test_transformers.py
+```
+
+### Arquitectura de Datos
+
+#### Star Schema (DataWarehouse)
+
+```
+                    ┌─────────────────┐
+                    │ FACT_MEDICIONES │
+                    │─────────────────│
+                    │ medicion_id PK  │
+                    │ source_id       │
+    ┌───────────────│ tiempo_id FK    │───────────────┐
+    │               │ hora_id FK      │               │
+    │    ┌──────────│ operador_id FK  │──────────┐    │
+    │    │          │ red_id FK       │          │    │
+    │    │    ┌─────│ calidad_id FK   │─────┐    │    │
+    │    │    │     │ ubicacion_id FK │     │    │    │
+    │    │    │  ┌──│ dispositivo_id  │──┐  │    │    │
+    │    │    │  │  │ zona_id FK      │  │  │    │    │
+    │    │    │  │  │ bateria         │  │  │    │    │
+    │    │    │  │  │ senal_dbm       │  │  │    │    │
+    │    │    │  │  │ velocidad       │  │  │    │    │
+    │    │    │  │  └─────────────────┘  │  │    │    │
+    ▼    ▼    ▼  ▼                       ▼  ▼    ▼    ▼
+┌───────┐┌───────┐┌───────┐  ┌───────────┐┌───────┐┌───────┐
+│DIM_   ││DIM_   ││DIM_   │  │DIM_       ││DIM_   ││DIM_   │
+│TIEMPO ││HORA   ││OPERA- │  │DISPOSITIVO││CALIDAD││ZONAS  │
+│       ││       ││DOR    │  │           ││       ││       │
+└───────┘└───────┘└───────┘  └───────────┘└───────┘└───────┘
+                  ┌───────┐  ┌───────────┐
+                  │DIM_   │  │DIM_       │
+                  │RED    │  │UBICACION  │
+                  └───────┘  └───────────┘
+```
+
+### Principios de Diseño
+
+#### Separación de Responsabilidades
+- **Root Level**: Scripts ejecutables directamente
+- **src/**: Módulos reutilizables y testeables
+- **tests/**: Cobertura de pruebas
+
+#### Flujo de Datos
+```
+Supabase API → etl_datawarehouse.py → PostgreSQL Neon → dashboard_advanced.py
+     ↓
+CSV backup → src/main.py → Archivos locales (desarrollo)
+```
+
+#### Imports desde Scripts Principales
+```python
+# En etl_datawarehouse.py y dashboard_advanced.py
+from src.loaders.distrito_loader import get_distrito_manager
+from src.config.settings import NEON_DATABASE_URL, SUPABASE_URL
+```
+
 ## Module Architecture
 
 ### Dependency Graph

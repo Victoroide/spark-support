@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Dict, Tuple
+import os
 
 
 LATITUDE_RANGE: Tuple[float, float] = (-90.0, 90.0)
@@ -7,6 +8,21 @@ LONGITUDE_RANGE: Tuple[float, float] = (-180.0, 180.0)
 SPEED_THRESHOLD: float = 200.0
 BATTERY_CRITICAL: float = 10.0
 GEOGRAPHIC_JUMP_THRESHOLD: float = 500.0
+
+# Supabase Configuration
+SUPABASE_URL: str = os.getenv("SUPABASE_URL")
+SUPABASE_KEY: str = os.getenv("SUPABASE_KEY")
+SUPABASE_TABLE: str = os.getenv("SUPABASE_TABLE")
+
+# Neon PostgreSQL DataWarehouse
+NEON_DATABASE_URL: str = os.getenv("NEON_DATABASE_URL")
+
+# Data source selection: "csv" or "supabase"
+DATA_SOURCE: str = "supabase"
+
+# Supabase fetch settings
+SUPABASE_BATCH_SIZE: int = 10000
+SUPABASE_MAX_RECORDS: int = None  # None for all records
 
 BASE_DIR: Path = Path(__file__).parent.parent.parent.resolve()
 INPUT_CSV_PATH: Path = BASE_DIR / "locations_rows.csv"

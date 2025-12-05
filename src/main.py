@@ -15,6 +15,10 @@ from src.config.settings import (
     INPUT_CSV_PATH,
     NETWORK_ANALYSIS_PATH,
     TEMPORAL_PATTERNS_PATH,
+    DATA_SOURCE,
+    SUPABASE_TABLE,
+    SUPABASE_BATCH_SIZE,
+    SUPABASE_MAX_RECORDS,
 )
 from src.exporters.result_writer import (
     write_anomalies,
@@ -23,6 +27,7 @@ from src.exporters.result_writer import (
     write_temporal_patterns,
 )
 from src.loaders.csv_loader import load_location_data
+from src.loaders.supabase_loader import load_location_data_from_supabase
 from src.transformers.geospatial_calc import add_distance_from_previous
 from src.transformers.temporal_features import add_temporal_features
 from src.utils.logger import setup_logger
@@ -47,7 +52,19 @@ def main() -> int:
 
         spark = create_spark_session()
 
-        df_raw = load_location_data(spark, INPUT_CSV_PATH)
+        # Load data based on configuration
+        if DATA_SOURCE == "supabase":
+            logger.info("Loading data from Supabase")
+            df_raw = load_location_data_from_supabase(
+                spark,
+                table_name=SUPABASE_TABLE,
+                batch_size=SUPABASE_BATCH_SIZE,
+                max_records=SUPABASE_MAX_RECORDS
+            )
+        else:
+            logger.info("Loading data from CSV")
+            df_raw = load_location_data(spark, INPUT_CSV_PATH)
+            
         initial_count = df_raw.count()
 
         logger.info("Starting data cleaning pipeline")

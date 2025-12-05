@@ -415,6 +415,241 @@ SchemaValidationError: Missing columns: ['timestamp']
 - Compose functionality in different ways
 - Build custom pipelines from existing modules
 
+## DataWarehouse ETL Optimizado
+
+### Arquitectura Optimizada
+
+El ETL ha sido completamente refactorizado para lograr cargas sub-5-minutos con 373k+ registros:
+
+```
+Supabase (origen) --> ETL Optimizado --> PostgreSQL/Neon (DataWarehouse)
+     |                     |                      |
+  locations         psycopg2 nativo        Esquema Estrella
+  372k+ reg         execute_values         1 FACT + 8 DIMs
+                    bulk inserts
+```
+
+### Optimizaciones Implementadas
+
+#### 1. psycopg2 Nativo (NO SQLAlchemy)
+- Connection pooling con `ThreadedConnectionPool`
+- `execute_values()` con `page_size=5000` para bulk inserts
+- Context managers para manejo de transacciones
+
+#### 2. Carga Paralela
+- Batch size de Supabase: 50,000 registros
+- Carga paralela de dimensiones con `ThreadPoolExecutor`
+- Cache de dimensiones en memoria para lookups
+
+#### 3. Gestion de Indices
+- DROP indexes antes de carga masiva
+- CREATE indexes despues de carga
+- VACUUM ANALYZE al finalizar
+
+#### 4. Transformaciones Vectorizadas
+- Operaciones pandas vectorizadas para normalizacion
+- Cache de dimension IDs para evitar queries repetitivas
+
+### Ejecucion del ETL
+
+```bash
+# Carga incremental (solo registros nuevos)
+./run_etl.sh
+
+# Carga completa (truncate + reload)
+./run_etl.sh --full
+```
+
+### Metricas de Performance
+
+| Fase | Target | Descripcion |
+|------|--------|-------------|
+| Supabase Fetch | <2 min | Carga de 373k registros |
+| Transform | <1 min | Normalizacion y mapping |
+| PostgreSQL Write | <2 min | Bulk inserts con execute_values |
+| **Total** | **<5 min** | **373k registros** |
+
+### Schema del DataWarehouse
+
+```
+DIM_TIEMPO (fechas) ----+
+DIM_HORA (24 horas) ----+
+DIM_OPERADOR (5 ops) ---+
+DIM_RED (5 tipos) ------+----> FACT_MEDICIONES (373k+)
+DIM_CALIDAD (5 niveles)-+
+DIM_UBICACION (coords) -+
+DIM_DISPOSITIVO (49+) --+
+DIM_ZONAS (20 distritos)+
+```
+
+---
+
+## Dashboard Avanzado
+
+### Stack Tecnologico
+
+- **Dash** - Framework base
+- **Plotly Express** - Graficos interactivos
+- **Folium** - Mapas con MarkerCluster
+- **psycopg2** - Queries optimizadas (NO SQLAlchemy)
+- **Bootstrap Icons** - Iconografia profesional
+
+### Ejecucion del Dashboard
+
+```bash
+./run_dashboard.sh
+# Abre http://127.0.0.1:8050
+```
+
+### Secciones del Dashboard
+
+1. **Filtros Laterales**
+   - Operador (multi-select)
+   - Zona/Distrito (multi-select)
+   - Rango horario (slider 0-23)
+   - Bateria (slider 0-100%)
+   - Velocidad (slider 0-120 km/h)
+
+2. **KPI Cards** (6 metricas)
+   - Total Mediciones
+   - Dispositivos Unicos
+   - Bateria Promedio
+   - Senal Promedio (dBm)
+   - Velocidad Promedio (km/h)
+   - Altitud Promedio (m)
+
+3. **Mapa Geografico** (Folium + MarkerCluster)
+   - Clustering jerarquico para 10k+ puntos
+   - Colores por operador
+   - Popups con detalles
+
+4. **Graficos Analiticos** (Plotly Express)
+   - Distribucion por Operador
+   - Distribucion por Zona (Top 15)
+   - Patron Horario
+   - Calidad por Operador
+   - Velocidad vs Altitud
+   - Heatmap de Actividad
+
+5. **Tabla de Anomalias**
+   - Velocidad Alta (>120 km/h)
+   - Bateria Critica (<10%)
+   - Senal Debil (<-100 dBm)
+
+### Optimizaciones de Query
+
+- Connection pooling (5 conexiones)
+- LIMIT inteligente (10k para mapas, 5k para scatters)
+- Agregaciones server-side
+- Callback maestro unico (actualiza todos los componentes)
+
+---
+
+## Instalacion Rapida
+
+```bash
+# 1. Crear virtual environment
+python -m venv .venv
+
+# 2. Activar (Windows)
+.venv\Scripts\activate
+
+# 3. Instalar dependencias
+pip install -r requirements.txt
+
+# 4. Configurar .env
+cp .env.example .env
+# Editar con credenciales de Supabase y Neon
+
+# 5. Ejecutar ETL
+./run_etl.sh --full
+
+# 6. Iniciar Dashboard
+./run_dashboard.sh
+```
+
+## Estructura de Archivos
+
+```
+spark-support/
+│
+├── ─────────────── PUNTOS DE ENTRADA PRINCIPALES ───────────────
+├── etl_datawarehouse.py          # ETL optimizado (Supabase → PostgreSQL Neon)
+├── dashboard_advanced.py         # Dashboard interactivo (Dash + Folium + Plotly)
+├── run_etl.sh                    # Script bash para ejecutar ETL
+├── run_dashboard.sh              # Script bash para ejecutar Dashboard
+│
+├── ─────────────── CONFIGURACIÓN ───────────────
+├── .env                          # Variables de entorno (credenciales)
+├── requirements.txt              # Dependencias Python
+├── pyproject.toml                # Configuración del proyecto
+├── setup.py                      # Instalación del paquete
+├── Makefile                      # Comandos de automatización
+├── .gitignore                    # Archivos ignorados por Git
+├── .pylintrc                     # Configuración de Pylint
+├── log4j.properties              # Configuración de logging Spark
+│
+├── ─────────────── DATOS ───────────────
+├── distrito_municipal_santacruz.json  # Polígonos GeoJSON de 16 distritos
+├── locations_rows.csv            # Datos CSV de respaldo (~17MB)
+│
+├── ─────────────── DOCUMENTACIÓN ───────────────
+├── README.md                     # Este archivo
+├── ARCHITECTURE.md               # Arquitectura y decisiones de diseño
+│
+├── ─────────────── MÓDULOS SRC/ ───────────────
+├── src/
+│   ├── __init__.py
+│   ├── main.py                   # Pipeline PySpark original
+│   │
+│   ├── analyzers/                # Análisis de datos
+│   │   ├── __init__.py
+│   │   ├── anomaly_detector.py   # Detección de anomalías
+│   │   ├── device_analyzer.py    # Métricas por dispositivo
+│   │   ├── network_analyzer.py   # Análisis de distribución de red
+│   │   └── temporal_analyzer.py  # Patrones temporales
+│   │
+│   ├── cleaners/                 # Limpieza y validación
+│   │   ├── __init__.py
+│   │   ├── coordinate_cleaner.py # Validación de coordenadas
+│   │   ├── null_handler.py       # Manejo de valores nulos
+│   │   └── timestamp_cleaner.py  # Validación de timestamps
+│   │
+│   ├── config/                   # Configuración
+│   │   ├── __init__.py
+│   │   └── settings.py           # Constantes y configuración
+│   │
+│   ├── exporters/                # Exportación de datos
+│   │   ├── __init__.py
+│   │   └── result_writer.py      # Escritura de resultados
+│   │
+│   ├── loaders/                  # Carga de datos
+│   │   ├── __init__.py
+│   │   ├── csv_loader.py         # Carga desde CSV
+│   │   ├── distrito_loader.py    # Carga de distritos GeoJSON
+│   │   └── supabase_loader.py    # Carga desde Supabase
+│   │
+│   ├── transformers/             # Transformaciones
+│   │   ├── __init__.py
+│   │   ├── geospatial_calc.py    # Cálculos geoespaciales
+│   │   └── temporal_features.py  # Features temporales
+│   │
+│   └── utils/                    # Utilidades
+│       ├── __init__.py
+│       ├── fix_district_names.py # Corrección de nombres de distritos
+│       ├── logger.py             # Configuración de logging
+│       ├── spark_session.py      # Creación de sesión Spark
+│       └── verify_table_case.py  # Verificación de tablas PostgreSQL
+│
+└── tests/                        # Pruebas unitarias
+    ├── __init__.py
+    ├── test_analyzers.py
+    ├── test_cleaners.py
+    ├── test_distrito_loader.py
+    ├── test_etl_fix.py
+    └── test_transformers.py
+```
+
 ## License
 
 Internal use only.
