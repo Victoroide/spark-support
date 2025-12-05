@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Dict, Tuple
 import os
-
+from dotenv import load_dotenv
 
 LATITUDE_RANGE: Tuple[float, float] = (-90.0, 90.0)
 LONGITUDE_RANGE: Tuple[float, float] = (-180.0, 180.0)
@@ -9,6 +9,7 @@ SPEED_THRESHOLD: float = 200.0
 BATTERY_CRITICAL: float = 10.0
 GEOGRAPHIC_JUMP_THRESHOLD: float = 500.0
 
+load_dotenv()
 # Supabase Configuration
 SUPABASE_URL: str = os.getenv("SUPABASE_URL")
 SUPABASE_KEY: str = os.getenv("SUPABASE_KEY")
